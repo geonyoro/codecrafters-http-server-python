@@ -8,7 +8,9 @@ def main():
     server_socket = socket.create_server(("localhost", 4221), reuse_port=True)
     while True:
         sock, _ = server_socket.accept()  # wait for client
-        sock.sendall(b"HTTP/1.1 200 OK\r\n\r\n")
+        data = sock.recv(1024)
+        status = b"200 OK" if b"GET / " in data else b"404 Not Found"
+        sock.sendall(b"HTTP/1.1 %s\r\n\r\n" % status)
         sock.close()
 
 

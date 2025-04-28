@@ -1,4 +1,5 @@
 import argparse
+import gzip
 import os  # noqa: F401
 import socket  # noqa: F401
 import threading
@@ -13,7 +14,15 @@ HTTP_STATUS_VERBOSE: dict[int, str] = {
 }
 
 
-ALLOWED_ENCODINGS = ("gzip",)
+class GzipEncoder:
+    @staticmethod
+    def encode(data: bytes) -> bytes:
+        return gzip.compress(data)
+
+
+ALLOWED_ENCODINGS = {
+    "gzip": GzipEncoder,
+}
 
 
 @dataclass
@@ -136,8 +145,11 @@ def handle_sock(sock, args):
 
 
 def to_response_data(
-    req: Request, body: str, status_int: int = 200, headers: dict | None = None
+    req: Request, body: str | bytes, status_int: int = 200, headers: dict | None = None
 ) -> bytes:
+    if isinstance(body, str):
+        body = body.encode("utf-8")
+
     try:
         status_str = HTTP_STATUS_VERBOSE[status_int]
     except KeyError:
@@ -151,9 +163,12 @@ def to_response_data(
             i.strip() for i in req.headers.get("Accept-Encoding", "").split(",")
         ]
         for acc_encoding in requested_encodings:
-            if acc_encoding in ALLOWED_ENCODINGS:
+            encoder = ALLOWED_ENCODINGS.get(acc_encoding)
+            if encoder:
                 # encode body
                 headers["Content-Encoding"] = acc_encoding
+                body = encoder.encode(body)
+                # for now only gzip
                 break
 
         # defaults
@@ -165,10 +180,12 @@ def to_response_data(
     headers_as_list = [f"{key}: {value}" for key, value in headers.items()]
     headers_as_str = "\r\n".join(headers_as_list)
     response_data = f"HTTP/1.1 {status_int} {status_str}\r\n{headers_as_str}\r\n"
+    response_data = response_data.encode("utf-8")
     if body:
-        response_data += f"\r\n{body}"
+        response_data += b"\r\n"
+        response_data += body
 
-    return response_data.encode("utf-8")
+    return response_data
 
 
 if __name__ == "__main__":

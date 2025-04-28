@@ -17,8 +17,12 @@ def main():
             if not sobj:
                 sock.sendall(b"HTTP/1.1 400 Bad Request\r\n\r\n")
             else:
-                response_data = sobj[1]
-                sock.sendall(b"HTTP/1.1 200 OK\r\n\r\n%s\r\n" % response_data)
+                param = sobj[1]
+                response_data = (
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %s\r\n\r\n%s"
+                    % (len(param), param)
+                )
+                sock.sendall(response_data.encode("utf-8"))
         elif b"404 Not Found" in request:
             sock.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
         sock.close()

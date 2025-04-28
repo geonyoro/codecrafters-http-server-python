@@ -9,8 +9,29 @@ def main():
     while True:
         sock, _ = server_socket.accept()  # wait for client
         request: str = sock.recv(1024).decode()
-        first_line = request.split("\r\n")[0]
-        method, path, _ = first_line.split()
+        parsing_headers = False
+        lines = request.split("\r\n")
+        request_headers = {}
+        method, path = "", ""
+        for index, line in enumerate(lines):
+            if index == 0:
+                method, path, _ = line.split()
+                parsing_headers = True
+                continue
+            elif parsing_headers:
+                if line == "":
+                    # if the next line is also empty, we are here
+                    next_index = index + 1
+                    if next_index < len(lines):
+                        if lines[next_index] == "":
+                            parsing_headers = False
+                else:
+                    title, value = line.split(": ")
+                    request_headers[title] = value
+            else:
+                print("BODY:", line)
+        print(f"{request_headers=} {method=} {path=}")
+
         if method != "GET":
             sock.sendall(b"HTTP/1.1 405 Method Not Allowed\r\n\r\nMethod Not Allowed")
             sock.close()
@@ -21,6 +42,12 @@ def main():
             continue
         if path.startswith("/echo/"):
             param = path[6:]
+            response_data = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(param)}\r\n\r\n{param}"
+            sock.sendall(response_data.encode("utf-8"))
+            sock.close()
+            continue
+        if path == "/user-agent":
+            param = request_headers.get("User-Agent", "")
             response_data = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(param)}\r\n\r\n{param}"
             sock.sendall(response_data.encode("utf-8"))
             sock.close()

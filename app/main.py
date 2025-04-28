@@ -10,6 +10,7 @@ class Request:
     method: str
     path: str
     headers: dict[str, str]
+    data: str
 
 
 def main():
@@ -32,6 +33,7 @@ def parse_request(request: str) -> Request:
     lines = request.split("\r\n")
     request_headers: dict[str, str] = {}
     method, path = "", ""
+    data_lines = []
     for index, line in enumerate(lines):
         if index == 0:
             method, path, _ = line.split()
@@ -39,67 +41,76 @@ def parse_request(request: str) -> Request:
             continue
         elif parsing_headers:
             if line == "":
-                # if the next line is also empty, we are here
-                next_index = index + 1
-                if next_index < len(lines):
-                    if lines[next_index] == "":
-                        parsing_headers = False
+                parsing_headers = False
             else:
                 title, value = line.split(": ")
                 request_headers[title] = value
-        # else:
-        #     print("BODY:", line)
+        else:
+            data_lines.append(line)
 
-    return Request(method=method, path=path, headers=request_headers)
+    data = "\r\n".join(data_lines)
+    return Request(method=method, path=path, headers=request_headers, data=data)
 
 
 def handle_sock(sock, args):
     raw_request: str = sock.recv(1024).decode()
     req = parse_request(raw_request)
 
-    if req.method != "GET":
-        sock.sendall(b"HTTP/1.1 405 Method Not Allowed\r\n\r\nMethod Not Allowed")
-        sock.close()
-        return
-
-    if req.path == "/":
-        sock.sendall(b"HTTP/1.1 200 OK\r\n\r\n")
-        sock.close()
-        return
-
-    if req.path.startswith("/echo/"):
-        param = req.path[6:]
-        response_data = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(param)}\r\n\r\n{param}"
-        sock.sendall(response_data.encode("utf-8"))
-        sock.close()
-        return
-
-    if req.path.startswith("/files/"):
-        filename = req.path[7:]
-        filepath = os.path.join(args.directory, filename)
-        if not os.path.exists(filepath):
-            sock.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
+    if req.method == "GET":
+        if req.path == "/":
+            sock.sendall(b"HTTP/1.1 200 OK\r\n\r\n")
             sock.close()
             return
 
-        with open(filepath) as wfile:
-            data = wfile.read()
-        response_data = f"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {len(data)}\r\n\r\n{data}"
-        sock.sendall(response_data.encode("utf-8"))
+        if req.path.startswith("/echo/"):
+            param = req.path[6:]
+            response_data = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(param)}\r\n\r\n{param}"
+            sock.sendall(response_data.encode("utf-8"))
+            sock.close()
+            return
+
+        if req.path.startswith("/files/"):
+            filename = req.path[7:]
+            filepath = os.path.join(args.directory, filename)
+            if not os.path.exists(filepath):
+                sock.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
+                sock.close()
+                return
+
+            with open(filepath) as wfile:
+                data = wfile.read()
+            response_data = f"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {len(data)}\r\n\r\n{data}"
+            sock.sendall(response_data.encode("utf-8"))
+            sock.close()
+            return
+
+        if req.path == "/user-agent":
+            param = req.headers.get("User-Agent", "")
+            response_data = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(param)}\r\n\r\n{param}"
+            sock.sendall(response_data.encode("utf-8"))
+            sock.close()
+            return
+
+        # default catch all
+        sock.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
         sock.close()
         return
 
-    if req.path == "/user-agent":
-        param = req.headers.get("User-Agent", "")
-        response_data = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(param)}\r\n\r\n{param}"
-        sock.sendall(response_data.encode("utf-8"))
+    elif req.method == "POST":
+        if req.path.startswith("/files/"):
+            filename = req.path[7:]
+            filepath = os.path.join(args.directory, filename)
+            with open(filepath, "w") as wfile:
+                data = wfile.write(req.data)
+            response_data = f"HTTP/1.1 201 Created\r\n\r\n"
+            sock.sendall(response_data.encode("utf-8"))
+            sock.close()
+            return
+
+    else:
+        sock.sendall(b"HTTP/1.1 405 Method Not Allowed\r\n\r\nMethod Not Allowed")
         sock.close()
         return
-
-    # default catch all
-    sock.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
-    sock.close()
-    return
 
 
 if __name__ == "__main__":

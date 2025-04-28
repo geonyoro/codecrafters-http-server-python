@@ -18,9 +18,10 @@ def main():
     args = parser.parse_args()
 
     # You can use print statements as follows for debugging, they'll be visible when running tests.
-    print("Logs from your program will appear here!")
+    port = 4221
+    print("Logs from your program will appear here! Listening on {port=}")
 
-    server_socket = socket.create_server(("localhost", 4221), reuse_port=True)
+    server_socket = socket.create_server(("localhost", port), reuse_port=True)
     while True:
         sock, _ = server_socket.accept()  # wait for client
         threading.Thread(target=handle_sock, args=(sock, args), daemon=True).start()

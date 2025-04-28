@@ -1,5 +1,13 @@
 import socket  # noqa: F401
 import threading
+from dataclasses import dataclass
+
+
+@dataclass
+class Request:
+    method: str
+    path: str
+    headers: dict[str, str]
 
 
 def main():
@@ -12,11 +20,10 @@ def main():
         threading.Thread(target=handle_sock, args=(sock,), daemon=True).start()
 
 
-def handle_sock(sock):
-    request: str = sock.recv(1024).decode()
+def parse_request(request: str) -> Request:
     parsing_headers = False
     lines = request.split("\r\n")
-    request_headers = {}
+    request_headers: dict[str, str] = {}
     method, path = "", ""
     for index, line in enumerate(lines):
         if index == 0:
@@ -33,29 +40,35 @@ def handle_sock(sock):
             else:
                 title, value = line.split(": ")
                 request_headers[title] = value
-        else:
-            print("BODY:", line)
-    print(f"{request_headers=} {method=} {path=}")
+        # else:
+        #     print("BODY:", line)
 
-    if method != "GET":
+    return Request(method=method, path=path, headers=request_headers)
+
+
+def handle_sock(sock):
+    raw_request: str = sock.recv(1024).decode()
+    req = parse_request(raw_request)
+
+    if req.method != "GET":
         sock.sendall(b"HTTP/1.1 405 Method Not Allowed\r\n\r\nMethod Not Allowed")
         sock.close()
         return
 
-    if path == "/":
+    if req.path == "/":
         sock.sendall(b"HTTP/1.1 200 OK\r\n\r\n")
         sock.close()
         return
 
-    if path.startswith("/echo/"):
-        param = path[6:]
+    if req.path.startswith("/echo/"):
+        param = req.path[6:]
         response_data = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(param)}\r\n\r\n{param}"
         sock.sendall(response_data.encode("utf-8"))
         sock.close()
         return
 
-    if path == "/user-agent":
-        param = request_headers.get("User-Agent", "")
+    if req.path == "/user-agent":
+        param = req.headers.get("User-Agent", "")
         response_data = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(param)}\r\n\r\n{param}"
         sock.sendall(response_data.encode("utf-8"))
         sock.close()

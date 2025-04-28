@@ -33,14 +33,6 @@ class Request:
     data: str
 
 
-@dataclass
-class Response:
-    body: str
-    headers: dict[str, str]
-    http_status: str
-    http_version: str = "HTTP/1.1"
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--directory", type=str, default="/tmp/")

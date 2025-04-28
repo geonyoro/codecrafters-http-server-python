@@ -29,7 +29,7 @@ def main():
                     title, value = line.split(": ")
                     request_headers[title] = value
             else:
-                print("BODY:", line)
+                print("BODY:", line, "")
         print(f"{request_headers=} {method=} {path=}")
 
         if method != "GET":

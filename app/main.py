@@ -21,7 +21,7 @@ def main():
                 response_data = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(param)}\r\n\r\n{param}"
                 print(f"{param=} {response_data=}")
                 sock.sendall(response_data.encode("utf-8"))
-        elif "404 Not Found" in request:
+        else:
             sock.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
         sock.close()
 

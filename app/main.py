@@ -1,4 +1,5 @@
 import socket  # noqa: F401
+import threading
 
 
 def main():
@@ -8,54 +9,62 @@ def main():
     server_socket = socket.create_server(("localhost", 4221), reuse_port=True)
     while True:
         sock, _ = server_socket.accept()  # wait for client
-        request: str = sock.recv(1024).decode()
-        parsing_headers = False
-        lines = request.split("\r\n")
-        request_headers = {}
-        method, path = "", ""
-        for index, line in enumerate(lines):
-            if index == 0:
-                method, path, _ = line.split()
-                parsing_headers = True
-                continue
-            elif parsing_headers:
-                if line == "":
-                    # if the next line is also empty, we are here
-                    next_index = index + 1
-                    if next_index < len(lines):
-                        if lines[next_index] == "":
-                            parsing_headers = False
-                else:
-                    title, value = line.split(": ")
-                    request_headers[title] = value
-            else:
-                print("BODY:", line, "")
-        print(f"{request_headers=} {method=} {path=}")
+        threading.Thread(target=handle_sock, args=(sock,), daemon=True).start()
 
-        if method != "GET":
-            sock.sendall(b"HTTP/1.1 405 Method Not Allowed\r\n\r\nMethod Not Allowed")
-            sock.close()
+
+def handle_sock(sock):
+    request: str = sock.recv(1024).decode()
+    parsing_headers = False
+    lines = request.split("\r\n")
+    request_headers = {}
+    method, path = "", ""
+    for index, line in enumerate(lines):
+        if index == 0:
+            method, path, _ = line.split()
+            parsing_headers = True
             continue
-        if path == "/":
-            sock.sendall(b"HTTP/1.1 200 OK\r\n\r\n")
-            sock.close()
-            continue
-        if path.startswith("/echo/"):
-            param = path[6:]
-            response_data = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(param)}\r\n\r\n{param}"
-            sock.sendall(response_data.encode("utf-8"))
-            sock.close()
-            continue
-        if path == "/user-agent":
-            param = request_headers.get("User-Agent", "")
-            response_data = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(param)}\r\n\r\n{param}"
-            sock.sendall(response_data.encode("utf-8"))
-            sock.close()
-            continue
+        elif parsing_headers:
+            if line == "":
+                # if the next line is also empty, we are here
+                next_index = index + 1
+                if next_index < len(lines):
+                    if lines[next_index] == "":
+                        parsing_headers = False
+            else:
+                title, value = line.split(": ")
+                request_headers[title] = value
         else:
-            sock.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
-            sock.close()
-            continue
+            print("BODY:", line)
+    print(f"{request_headers=} {method=} {path=}")
+
+    if method != "GET":
+        sock.sendall(b"HTTP/1.1 405 Method Not Allowed\r\n\r\nMethod Not Allowed")
+        sock.close()
+        return
+
+    if path == "/":
+        sock.sendall(b"HTTP/1.1 200 OK\r\n\r\n")
+        sock.close()
+        return
+
+    if path.startswith("/echo/"):
+        param = path[6:]
+        response_data = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(param)}\r\n\r\n{param}"
+        sock.sendall(response_data.encode("utf-8"))
+        sock.close()
+        return
+
+    if path == "/user-agent":
+        param = request_headers.get("User-Agent", "")
+        response_data = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(param)}\r\n\r\n{param}"
+        sock.sendall(response_data.encode("utf-8"))
+        sock.close()
+        return
+
+    # default catch all
+    sock.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
+    sock.close()
+    return
 
 
 if __name__ == "__main__":

@@ -4,6 +4,17 @@ import socket  # noqa: F401
 import threading
 from dataclasses import dataclass
 
+HTTP_STATUS_VERBOSE: dict[int, str] = {
+    200: "OK",
+    201: "Created",
+    400: "Bad Request",
+    404: "Not Found",
+    405: "Method Not Allowed",
+}
+
+
+ALLOWED_ENCODINGS = ("gzip",)
+
 
 @dataclass
 class Request:
@@ -11,6 +22,14 @@ class Request:
     path: str
     headers: dict[str, str]
     data: str
+
+
+@dataclass
+class Response:
+    body: str
+    headers: dict[str, str]
+    http_status: str
+    http_version: str = "HTTP/1.1"
 
 
 def main():
@@ -58,14 +77,13 @@ def handle_sock(sock, args):
 
     if req.method == "GET":
         if req.path == "/":
-            sock.sendall(b"HTTP/1.1 200 OK\r\n\r\n")
+            sock.sendall(to_response_data(req=req, body="", status_int=200))
             sock.close()
             return
 
         if req.path.startswith("/echo/"):
-            param = req.path[6:]
-            response_data = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(param)}\r\n\r\n{param}"
-            sock.sendall(response_data.encode("utf-8"))
+            echo_path = req.path[6:]
+            sock.sendall(to_response_data(req=req, body=echo_path))
             sock.close()
             return
 
@@ -73,26 +91,31 @@ def handle_sock(sock, args):
             filename = req.path[7:]
             filepath = os.path.join(args.directory, filename)
             if not os.path.exists(filepath):
-                sock.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
+                sock.sendall(to_response_data(req=req, body="", status_int=400))
+
                 sock.close()
                 return
 
             with open(filepath) as wfile:
                 data = wfile.read()
-            response_data = f"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {len(data)}\r\n\r\n{data}"
-            sock.sendall(response_data.encode("utf-8"))
+            sock.sendall(
+                to_response_data(
+                    req=req,
+                    body=data,
+                    headers={"Content-Type": "application/octet-stream"},
+                )
+            )
             sock.close()
             return
 
         if req.path == "/user-agent":
-            param = req.headers.get("User-Agent", "")
-            response_data = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(param)}\r\n\r\n{param}"
-            sock.sendall(response_data.encode("utf-8"))
+            user_agent = req.headers.get("User-Agent", "")
+            sock.sendall(to_response_data(req=req, body=user_agent))
             sock.close()
             return
 
         # default catch all
-        sock.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
+        sock.sendall(to_response_data(req=req, body="", status_int=404))
         sock.close()
         return
 
@@ -102,15 +125,46 @@ def handle_sock(sock, args):
             filepath = os.path.join(args.directory, filename)
             with open(filepath, "w") as wfile:
                 data = wfile.write(req.data)
-            response_data = f"HTTP/1.1 201 Created\r\n\r\n"
-            sock.sendall(response_data.encode("utf-8"))
+            sock.sendall(to_response_data(req=req, body="", status_int=201))
             sock.close()
             return
 
     else:
-        sock.sendall(b"HTTP/1.1 405 Method Not Allowed\r\n\r\nMethod Not Allowed")
+        sock.sendall(to_response_data(req=req, body="", status_int=405))
         sock.close()
         return
+
+
+def to_response_data(
+    req: Request, body: str, status_int: int = 200, headers: dict | None = None
+) -> bytes:
+    try:
+        status_str = HTTP_STATUS_VERBOSE[status_int]
+    except KeyError:
+        raise KeyError(f"Unsupported status code {status_int}")
+
+    if not headers:
+        headers = {}
+
+    if body:
+        acc_encoding = req.headers.get("Accept-Encoding")
+        if acc_encoding in ALLOWED_ENCODINGS:
+            # encode body
+            headers["Content-Encoding"] = acc_encoding
+
+        # defaults
+        if "Content-Type" not in headers:
+            headers["Content-Type"] = "text/plain"
+        if "Content-Length" not in headers:
+            headers["Content-Length"] = len(body)
+
+    headers_as_list = [f"{key}: {value}" for key, value in headers.items()]
+    headers_as_str = "\r\n".join(headers_as_list)
+    response_data = f"HTTP/1.1 {status_int} {status_str}\r\n{headers_as_str}\r\n"
+    if body:
+        response_data += f"\r\n{body}"
+
+    return response_data.encode("utf-8")
 
 
 if __name__ == "__main__":

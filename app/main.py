@@ -91,7 +91,7 @@ def handle_sock(sock, args):
             filename = req.path[7:]
             filepath = os.path.join(args.directory, filename)
             if not os.path.exists(filepath):
-                sock.sendall(to_response_data(req=req, body="", status_int=400))
+                sock.sendall(to_response_data(req=req, body="", status_int=404))
 
                 sock.close()
                 return

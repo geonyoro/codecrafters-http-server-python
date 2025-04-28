@@ -147,10 +147,14 @@ def to_response_data(
         headers = {}
 
     if body:
-        acc_encoding = req.headers.get("Accept-Encoding")
-        if acc_encoding in ALLOWED_ENCODINGS:
-            # encode body
-            headers["Content-Encoding"] = acc_encoding
+        requested_encodings = [
+            i.strip() for i in req.headers.get("Accept-Encoding", "").split(",")
+        ]
+        for acc_encoding in requested_encodings:
+            if acc_encoding in ALLOWED_ENCODINGS:
+                # encode body
+                headers["Content-Encoding"] = acc_encoding
+                break
 
         # defaults
         if "Content-Type" not in headers:

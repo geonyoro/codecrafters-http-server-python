@@ -1,3 +1,5 @@
+import argparse
+import os  # noqa: F401
 import socket  # noqa: F401
 import threading
 from dataclasses import dataclass
@@ -11,13 +13,17 @@ class Request:
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--directory", type=str, default="/tmp/")
+    args = parser.parse_args()
+
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     print("Logs from your program will appear here!")
 
     server_socket = socket.create_server(("localhost", 4221), reuse_port=True)
     while True:
         sock, _ = server_socket.accept()  # wait for client
-        threading.Thread(target=handle_sock, args=(sock,), daemon=True).start()
+        threading.Thread(target=handle_sock, args=(sock, args), daemon=True).start()
 
 
 def parse_request(request: str) -> Request:
@@ -46,7 +52,7 @@ def parse_request(request: str) -> Request:
     return Request(method=method, path=path, headers=request_headers)
 
 
-def handle_sock(sock):
+def handle_sock(sock, args):
     raw_request: str = sock.recv(1024).decode()
     req = parse_request(raw_request)
 
@@ -63,6 +69,21 @@ def handle_sock(sock):
     if req.path.startswith("/echo/"):
         param = req.path[6:]
         response_data = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(param)}\r\n\r\n{param}"
+        sock.sendall(response_data.encode("utf-8"))
+        sock.close()
+        return
+
+    if req.path.startswith("/files/"):
+        filename = req.path[7:]
+        filepath = os.path.join(args.directory, filename)
+        if not os.path.exists(filepath):
+            sock.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
+            sock.close()
+            return
+
+        with open(filepath) as wfile:
+            data = wfile.read()
+        response_data = f"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {len(data)}\r\n\r\n{data}"
         sock.sendall(response_data.encode("utf-8"))
         sock.close()
         return

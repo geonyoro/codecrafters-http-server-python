@@ -158,11 +158,11 @@ def to_response_data(
                 # for now only gzip
                 break
 
-        # defaults
-        if "Content-Type" not in headers:
-            headers["Content-Type"] = "text/plain"
-        if "Content-Length" not in headers:
-            headers["Content-Length"] = len(body)
+    # defaults
+    if "Content-Type" not in headers:
+        headers["Content-Type"] = "text/plain"
+    if "Content-Length" not in headers:
+        headers["Content-Length"] = len(body)
 
     headers_as_list = [f"{key}: {value}" for key, value in headers.items()]
     headers_as_str = "\r\n".join(headers_as_list)

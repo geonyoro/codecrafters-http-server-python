@@ -40,7 +40,7 @@ def main():
 
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     port = 4221
-    print("Logs from your program will appear here! Listening on {port=}")
+    print(f"Logs from your program will appear here! Listening on {port=}")
 
     server_socket = socket.create_server(("localhost", port), reuse_port=True)
     while True:
@@ -73,67 +73,62 @@ def parse_request(request: str) -> Request:
 
 
 def handle_sock(sock, args):
-    raw_request: str = sock.recv(1024).decode()
-    req = parse_request(raw_request)
+    while True:
+        raw_request: str = sock.recv(1024).decode()
+        if not raw_request.strip():
+            continue
 
-    if req.method == "GET":
-        if req.path == "/":
-            sock.sendall(to_response_data(req=req, body="", status_int=200))
-            sock.close()
-            return
+        req = parse_request(raw_request)
 
-        if req.path.startswith("/echo/"):
-            echo_path = req.path[6:]
-            sock.sendall(to_response_data(req=req, body=echo_path))
-            sock.close()
-            return
+        if req.method == "GET":
+            if req.path == "/":
+                sock.sendall(to_response_data(req=req, body="", status_int=200))
+                continue
 
-        if req.path.startswith("/files/"):
-            filename = req.path[7:]
-            filepath = os.path.join(args.directory, filename)
-            if not os.path.exists(filepath):
-                sock.sendall(to_response_data(req=req, body="", status_int=404))
+            if req.path.startswith("/echo/"):
+                echo_path = req.path[6:]
+                sock.sendall(to_response_data(req=req, body=echo_path))
+                continue
 
-                sock.close()
-                return
+            if req.path.startswith("/files/"):
+                filename = req.path[7:]
+                filepath = os.path.join(args.directory, filename)
+                if not os.path.exists(filepath):
+                    sock.sendall(to_response_data(req=req, body="", status_int=404))
+                    continue
 
-            with open(filepath) as wfile:
-                data = wfile.read()
-            sock.sendall(
-                to_response_data(
-                    req=req,
-                    body=data,
-                    headers={"Content-Type": "application/octet-stream"},
+                with open(filepath) as wfile:
+                    data = wfile.read()
+                sock.sendall(
+                    to_response_data(
+                        req=req,
+                        body=data,
+                        headers={"Content-Type": "application/octet-stream"},
+                    )
                 )
-            )
-            sock.close()
-            return
+                continue
 
-        if req.path == "/user-agent":
-            user_agent = req.headers.get("User-Agent", "")
-            sock.sendall(to_response_data(req=req, body=user_agent))
-            sock.close()
-            return
+            if req.path == "/user-agent":
+                user_agent = req.headers.get("User-Agent", "")
+                sock.sendall(to_response_data(req=req, body=user_agent))
+                continue
 
-        # default catch all
-        sock.sendall(to_response_data(req=req, body="", status_int=404))
-        sock.close()
-        return
+            # default catch all
+            sock.sendall(to_response_data(req=req, body="", status_int=404))
+            continue
 
-    elif req.method == "POST":
-        if req.path.startswith("/files/"):
-            filename = req.path[7:]
-            filepath = os.path.join(args.directory, filename)
-            with open(filepath, "w") as wfile:
-                data = wfile.write(req.data)
-            sock.sendall(to_response_data(req=req, body="", status_int=201))
-            sock.close()
-            return
+        elif req.method == "POST":
+            if req.path.startswith("/files/"):
+                filename = req.path[7:]
+                filepath = os.path.join(args.directory, filename)
+                with open(filepath, "w") as wfile:
+                    data = wfile.write(req.data)
+                sock.sendall(to_response_data(req=req, body="", status_int=201))
+                continue
 
-    else:
-        sock.sendall(to_response_data(req=req, body="", status_int=405))
-        sock.close()
-        return
+        else:
+            sock.sendall(to_response_data(req=req, body="", status_int=405))
+            continue
 
 
 def to_response_data(

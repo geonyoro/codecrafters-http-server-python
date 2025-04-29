@@ -168,9 +168,10 @@ def to_response_data(
     headers_as_str = "\r\n".join(headers_as_list)
     response_data = f"HTTP/1.1 {status_int} {status_str}\r\n{headers_as_str}\r\n"
     response_data = response_data.encode("utf-8")
+    response_data += b"\r\n"
     if body:
-        response_data += b"\r\n"
         response_data += body
+    # print(response_data)
 
     return response_data
 

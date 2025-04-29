@@ -32,6 +32,9 @@ class Request:
     headers: dict[str, str]
     data: str
 
+    def should_close_socket(self) -> bool:
+        return self.headers.get("Connection", "") == "close"
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -83,39 +86,32 @@ def handle_sock(sock, args):
         if req.method == "GET":
             if req.path == "/":
                 sock.sendall(to_response_data(req=req, body="", status_int=200))
-                continue
 
-            if req.path.startswith("/echo/"):
+            elif req.path.startswith("/echo/"):
                 echo_path = req.path[6:]
                 sock.sendall(to_response_data(req=req, body=echo_path))
-                continue
 
-            if req.path.startswith("/files/"):
+            elif req.path.startswith("/files/"):
                 filename = req.path[7:]
                 filepath = os.path.join(args.directory, filename)
                 if not os.path.exists(filepath):
                     sock.sendall(to_response_data(req=req, body="", status_int=404))
-                    continue
-
-                with open(filepath) as wfile:
-                    data = wfile.read()
-                sock.sendall(
-                    to_response_data(
-                        req=req,
-                        body=data,
-                        headers={"Content-Type": "application/octet-stream"},
+                else:
+                    with open(filepath) as wfile:
+                        data = wfile.read()
+                    sock.sendall(
+                        to_response_data(
+                            req=req,
+                            body=data,
+                            headers={"Content-Type": "application/octet-stream"},
+                        )
                     )
-                )
-                continue
-
-            if req.path == "/user-agent":
+            elif req.path == "/user-agent":
                 user_agent = req.headers.get("User-Agent", "")
                 sock.sendall(to_response_data(req=req, body=user_agent))
-                continue
-
-            # default catch all
-            sock.sendall(to_response_data(req=req, body="", status_int=404))
-            continue
+            else:
+                # default catch all
+                sock.sendall(to_response_data(req=req, body="", status_int=404))
 
         elif req.method == "POST":
             if req.path.startswith("/files/"):
@@ -124,11 +120,12 @@ def handle_sock(sock, args):
                 with open(filepath, "w") as wfile:
                     data = wfile.write(req.data)
                 sock.sendall(to_response_data(req=req, body="", status_int=201))
-                continue
-
         else:
             sock.sendall(to_response_data(req=req, body="", status_int=405))
-            continue
+
+        if req.should_close_socket():
+            sock.close()
+            return
 
 
 def to_response_data(
@@ -144,6 +141,9 @@ def to_response_data(
 
     if not headers:
         headers = {}
+
+    if req.should_close_socket():
+        headers["Connection"] = "close"
 
     if body:
         requested_encodings = [
